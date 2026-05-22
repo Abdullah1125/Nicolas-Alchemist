@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 295a9b372aa4aee438b12ebec806c182, type: 3}
+  m_Name: NewPotionRecipe
+  m_EditorClassIdentifier: Assembly-CSharp::PotionRecipe
+  requiredTags:
+  - su
+  - un
+  resultPotionPrefab: {fileID: 1854180954976760315, guid: 9304c3b6c07050246b8c755a3469647e, type: 3}
