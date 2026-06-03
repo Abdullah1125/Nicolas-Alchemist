@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 874713407165250490}
+  - component: {fileID: -1858059014756154048}
   - component: {fileID: 4627184490252543618}
   - component: {fileID: 4276707648291504328}
   - component: {fileID: 12931541778321562}
@@ -40,6 +41,19 @@ Transform:
   - {fileID: 3982194594746116100}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-1858059014756154048
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 575239915212351117}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad3e44e4c984a1c4dae4cfd45cd17931, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FallBoundaryDestroyer
+  killYLevel: -5.86
 --- !u!33 &4627184490252543618
 MeshFilter:
   m_ObjectHideFlags: 0

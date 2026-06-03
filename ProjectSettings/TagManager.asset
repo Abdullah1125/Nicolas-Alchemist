@@ -9,6 +9,8 @@ TagManager:
   - un
   - hamur
   - EmptyBottle
+  - GoodPotion
+  - RuinedPotion
   layers:
   - Default
   - TransparentFX

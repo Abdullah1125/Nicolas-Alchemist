@@ -73,12 +73,13 @@ GameObject:
   - component: {fileID: 2767142417729932503}
   - component: {fileID: 8084902752449761059}
   - component: {fileID: 3153708565480213344}
+  - component: {fileID: 5864269524254820371}
   - component: {fileID: 6347295798187303504}
   - component: {fileID: 3300938844963635633}
   - component: {fileID: 1554234229260543760}
   m_Layer: 0
   m_Name: bootle
-  m_TagString: Untagged
+  m_TagString: GoodPotion
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -150,6 +151,19 @@ Rigidbody:
   m_Interpolate: 1
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &5864269524254820371
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1854180954976760315}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad3e44e4c984a1c4dae4cfd45cd17931, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FallBoundaryDestroyer
+  killYLevel: -5.86
 --- !u!114 &6347295798187303504
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
@@ -5,11 +6,13 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 
 /// <summary>
-/// Manages cauldron tag reading, URP coloring, and XR dual-grip integrated crafting.
-/// (Kazan içi etiket okuma, URP renk deðiþimi ve XR dual-grip entegreli üretimi yönetir.)
+/// Kazan etkileþimlerini yönetir. Tarif tamamlandýðýnda kazan sývýsý otomatik olarak final iksir rengine dönüþür.
 /// </summary>
+[RequireComponent(typeof(AudioSource))]
 public class AlchemyCauldron : MonoBehaviour
 {
+    public static event Action OnNewPotionStarted;
+
     [System.Serializable]
     public struct TagColorMap
     {
@@ -22,35 +25,36 @@ public class AlchemyCauldron : MonoBehaviour
     public List<TagColorMap> tagColorMappings;
 
     [Header("Spawn Settings (Üretim Ayarlarý)")]
-    [Tooltip("Dolu iksirin çýkacaðý nokta. Boþ býrakýlýrsa XR ile otomatik ele verilir.")]
     public Transform customSpawnPoint;
 
     [Header("Liquid Visuals (Sývý Görselleri)")]
     public MeshRenderer liquidRenderer;
     public Color defaultWaterColor = Color.cyan;
+    public Color ruinedWaterColor = new Color(0.2f, 0.1f, 0.1f); // Çamur Rengi
     private Color _currentLiquidColor;
 
-    [Header("Feedback Effects (Geri Bildirim Efektleri)")]
+    [Header("Audio & Feedback (Ses ve Geri Bildirim)")]
     public ParticleSystem successParticles;
     public ParticleSystem failParticles;
     public GameObject ruinedPotionPrefab;
 
+    [Space(10)]
+    public AudioClip splashSound;
+    public AudioClip fillSuccessSound;
+    public AudioClip failSound;
+    private AudioSource _audioSource;
+
     private List<string> _addedTags = new List<string>();
     private bool _isRuined = false;
 
-    /// <summary>
-    /// Resets the cauldron state on awake.
-    /// (Oyun baþladýðýnda kazan durumunu sýfýrlar.)
-    /// </summary>
     private void Start()
     {
+        _audioSource = GetComponent<AudioSource>();
+        if (_audioSource != null) _audioSource.spatialBlend = 1f;
+
         ResetCauldron();
     }
 
-    /// <summary>
-    /// Checks tags of objects entering the liquid trigger.
-    /// (Sývý alanýna giren objelerin etiketlerini kontrol eder.)
-    /// </summary>
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("EmptyBottle"))
@@ -59,46 +63,58 @@ public class AlchemyCauldron : MonoBehaviour
             return;
         }
 
-        Color? itemColor = GetColorForTag(other.tag);
-        if (itemColor.HasValue)
+        if (IsTagInAnyRecipe(other.tag))
         {
-            ProcessIngredient(other.gameObject, other.tag, itemColor.Value);
+            Color? itemColor = GetColorForTag(other.tag);
+            if (itemColor.HasValue)
+            {
+                ProcessIngredient(other.gameObject, other.tag, itemColor.Value);
+            }
         }
     }
 
-    /// <summary>
-    /// Processes the ingredient and directly updates URP liquid color.
-    /// (Atýlan malzemeyi iþler ve sývý URP rengini direkt günceller.)
-    /// </summary>
     private void ProcessIngredient(GameObject ingredientObject, string itemTag, Color itemColor)
     {
+        if (_addedTags.Count == 0)
+        {
+            OnNewPotionStarted?.Invoke();
+        }
+
         _addedTags.Add(itemTag);
 
         if (!_isRuined)
         {
-            if (IsPathStillValid())
-            {
-                _currentLiquidColor = itemColor;
+            // 1. KONTROL: Atýlan bu son malzeme ile iksir tamamen bitti mi?
+            PotionRecipe completedRecipe = GetExactMatch();
 
-                if (liquidRenderer != null)
-                {
-                    liquidRenderer.material.SetColor("_BaseColor", _currentLiquidColor);
-                    liquidRenderer.material.SetColor("_Color", _currentLiquidColor);
-                }
+            if (completedRecipe != null)
+            {
+                // ÝKSÝR PÝÞTÝ! Kazan direkt olarak tarifin final rengini (Target Color) alsýn.
+                _currentLiquidColor = completedRecipe.targetColor;
+                UpdateLiquidColor(_currentLiquidColor);
+
+                // Ýstersen buraya sonradan bir "Ding!" baþarma sesi de ekleyebilirsin.
             }
+            // 2. KONTROL: Henüz bitmedi, doðru yolda mý?
+            else if (GetFirstValidRecipe() != null)
+            {
+                // Yolda, atýlan malzemenin rengini (TagColorMap) alsýn.
+                _currentLiquidColor = itemColor;
+                UpdateLiquidColor(_currentLiquidColor);
+            }
+            // 3. KONTROL: Hatalý malzeme mi atýldý?
             else
             {
                 _isRuined = true;
+                _currentLiquidColor = ruinedWaterColor;
+                UpdateLiquidColor(_currentLiquidColor);
             }
         }
 
+        PlaySound(splashSound);
         Destroy(ingredientObject);
     }
 
-    /// <summary>
-    /// Evaluates mixture, spawns potion, and forces XR grip with DualGrip pre-warm.
-    /// (Karýþýmý doðrular, iksiri üretir ve DualGrip hazýrlýðýyla XR eline zorla verir.)
-    /// </summary>
     private void DipBottle(GameObject emptyBottle)
     {
         XRGrabInteractable oldGrab = emptyBottle.GetComponent<XRGrabInteractable>();
@@ -122,16 +138,14 @@ public class AlchemyCauldron : MonoBehaviour
 
             if (newPotion.TryGetComponent<PotionColorController>(out PotionColorController colorController))
             {
-                colorController.SetLiquidColor(_currentLiquidColor);
+                colorController.SetLiquidColor(matchedRecipe.targetColor);
             }
 
-            // XR DUAL-GRIP ENTEGRASYONU
             if (customSpawnPoint == null && holdingHand != null)
             {
                 XRGrabInteractable newGrab = newPotion.GetComponent<XRGrabInteractable>();
                 if (newGrab != null)
                 {
-                    // Þiþeyi ele vermeden HEMEN ÖNCE tutma noktasýný ilgili ele göre ayarla
                     if (newPotion.TryGetComponent<DualGripMover>(out DualGripMover dualGrip))
                     {
                         dualGrip.UpdateGripPosition(holdingHand.transform);
@@ -140,28 +154,25 @@ public class AlchemyCauldron : MonoBehaviour
                     XRInteractionManager interactionManager = FindFirstObjectByType<XRInteractionManager>();
                     if (interactionManager != null)
                     {
-                        // Tutma noktasý doðru ayarlandýðý için ele jilet gibi oturur
                         interactionManager.SelectEnter(holdingHand, (IXRSelectInteractable)newGrab);
                     }
                 }
             }
 
             if (successParticles != null) successParticles.Play();
+            PlaySound(fillSuccessSound);
         }
         else
         {
             Instantiate(ruinedPotionPrefab, spawnPos, spawnRot);
             if (failParticles != null) failParticles.Play();
+            PlaySound(failSound);
         }
 
         ResetCauldron();
     }
 
-    /// <summary>
-    /// Validates if current tags match any valid recipe path.
-    /// (Mevcut etiketlerin herhangi bir tarif rotasýna uyup uymadýðýný sýnar.)
-    /// </summary>
-    private bool IsPathStillValid()
+    private PotionRecipe GetFirstValidRecipe()
     {
         foreach (PotionRecipe recipe in allRecipes)
         {
@@ -176,15 +187,11 @@ public class AlchemyCauldron : MonoBehaviour
                     break;
                 }
             }
-            if (possible) return true;
+            if (possible) return recipe;
         }
-        return false;
+        return null;
     }
 
-    /// <summary>
-    /// Returns the exact recipe matching current ingredients.
-    /// (Eklenen etiketlerle birebir eþleþen tarifi döndürür.)
-    /// </summary>
     private PotionRecipe GetExactMatch()
     {
         foreach (PotionRecipe recipe in allRecipes)
@@ -203,10 +210,15 @@ public class AlchemyCauldron : MonoBehaviour
         return null;
     }
 
-    /// <summary>
-    /// Finds the mapped color for the given ingredient tag.
-    /// (Etikete karþýlýk gelen rengi haritadan bulur.)
-    /// </summary>
+    private bool IsTagInAnyRecipe(string tagToCheck)
+    {
+        foreach (PotionRecipe recipe in allRecipes)
+        {
+            if (recipe.requiredTags.Contains(tagToCheck)) return true;
+        }
+        return false;
+    }
+
     private Color? GetColorForTag(string searchTag)
     {
         foreach (TagColorMap map in tagColorMappings)
@@ -216,20 +228,28 @@ public class AlchemyCauldron : MonoBehaviour
         return null;
     }
 
-    /// <summary>
-    /// Clears data and resets cauldron visuals.
-    /// (Kazan verilerini ve rengini sýfýrlar.)
-    /// </summary>
+    private void UpdateLiquidColor(Color newColor)
+    {
+        if (liquidRenderer != null)
+        {
+            liquidRenderer.material.SetColor("_BaseColor", newColor);
+            liquidRenderer.material.SetColor("_Color", newColor);
+        }
+    }
+
     private void ResetCauldron()
     {
         _addedTags.Clear();
         _isRuined = false;
         _currentLiquidColor = defaultWaterColor;
+        UpdateLiquidColor(_currentLiquidColor);
+    }
 
-        if (liquidRenderer != null)
+    private void PlaySound(AudioClip clip)
+    {
+        if (clip != null && _audioSource != null)
         {
-            liquidRenderer.material.SetColor("_BaseColor", _currentLiquidColor);
-            liquidRenderer.material.SetColor("_Color", _currentLiquidColor);
+            _audioSource.PlayOneShot(clip);
         }
     }
 }

@@ -16,3 +16,4 @@ MonoBehaviour:
   - su
   - un
   resultPotionPrefab: {fileID: 1854180954976760315, guid: 9304c3b6c07050246b8c755a3469647e, type: 3}
+  targetColor: {r: 0.4867924, g: 0.4867924, b: 0.4867924, a: 1}
