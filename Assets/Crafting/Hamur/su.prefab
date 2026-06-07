@@ -41,6 +41,7 @@ GameObject:
   m_Component:
   - component: {fileID: 268325337772973919}
   - component: {fileID: 9093163824307490413}
+  - component: {fileID: -4538273346017921294}
   - component: {fileID: 5801370270471331807}
   - component: {fileID: 7802452926556274792}
   - component: {fileID: 4324276179630133374}
@@ -48,6 +49,7 @@ GameObject:
   - component: {fileID: 9027795059796500081}
   - component: {fileID: 7901979841694814270}
   - component: {fileID: 1297731869742839669}
+  - component: {fileID: 508554943655917879}
   m_Layer: 0
   m_Name: su
   m_TagString: su
@@ -85,7 +87,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad3e44e4c984a1c4dae4cfd45cd17931, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FallBoundaryDestroyer
-  killYLevel: -5.86
+  killYLevel: 0.1
+--- !u!114 &-4538273346017921294
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1101330362755788100}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6249eeb5a32b8004cbfbb54c35439eed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ButtonLaunch
+  launchForce: 25
 --- !u!33 &5801370270471331807
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -441,6 +456,23 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &508554943655917879
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1101330362755788100}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cab514e6fcb92b44ca919e43a40e22b6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CollisionSoundController
+  impactSound: {fileID: 8300000, guid: 43461572f27b14241bad3c0f36323d51, type: 3}
+  maxVolume: 1
+  minImpactForce: 1
+  cooldown: 0.15
+  muteDurationAfterRelease: 0.2
 --- !u!1 &1884555452553387472
 GameObject:
   m_ObjectHideFlags: 0

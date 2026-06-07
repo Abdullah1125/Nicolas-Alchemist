@@ -6,7 +6,7 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 
 /// <summary>
-/// Kazan etkileþimlerini yönetir. Tarif tamamlandýðýnda kazan sývýsý otomatik olarak final iksir rengine dönüþür.
+/// Kazan etkileþimlerini yönetir. Karýþýmý doðrular, sývý rengini günceller ve her iki sonuçta da (baþarýlý/baþarýsýz) iksiri oyuncunun eline zorla verir.
 /// </summary>
 [RequireComponent(typeof(AudioSource))]
 public class AlchemyCauldron : MonoBehaviour
@@ -47,6 +47,9 @@ public class AlchemyCauldron : MonoBehaviour
     private List<string> _addedTags = new List<string>();
     private bool _isRuined = false;
 
+    /// <summary>
+    /// Baþlangýç ayarlarýný yapar ve ses kaynaðýný hazýrlar.
+    /// </summary>
     private void Start()
     {
         _audioSource = GetComponent<AudioSource>();
@@ -55,6 +58,9 @@ public class AlchemyCauldron : MonoBehaviour
         ResetCauldron();
     }
 
+    /// <summary>
+    /// Kazana giren objeleri (þiþe veya malzeme) algýlar.
+    /// </summary>
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("EmptyBottle"))
@@ -73,6 +79,9 @@ public class AlchemyCauldron : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Kazana atýlan malzemeyi iþler ve tarife göre sývý rengini günceller.
+    /// </summary>
     private void ProcessIngredient(GameObject ingredientObject, string itemTag, Color itemColor)
     {
         if (_addedTags.Count == 0)
@@ -84,25 +93,18 @@ public class AlchemyCauldron : MonoBehaviour
 
         if (!_isRuined)
         {
-            // 1. KONTROL: Atýlan bu son malzeme ile iksir tamamen bitti mi?
             PotionRecipe completedRecipe = GetExactMatch();
 
             if (completedRecipe != null)
             {
-                // ÝKSÝR PÝÞTÝ! Kazan direkt olarak tarifin final rengini (Target Color) alsýn.
                 _currentLiquidColor = completedRecipe.targetColor;
                 UpdateLiquidColor(_currentLiquidColor);
-
-                // Ýstersen buraya sonradan bir "Ding!" baþarma sesi de ekleyebilirsin.
             }
-            // 2. KONTROL: Henüz bitmedi, doðru yolda mý?
             else if (GetFirstValidRecipe() != null)
             {
-                // Yolda, atýlan malzemenin rengini (TagColorMap) alsýn.
                 _currentLiquidColor = itemColor;
                 UpdateLiquidColor(_currentLiquidColor);
             }
-            // 3. KONTROL: Hatalý malzeme mi atýldý?
             else
             {
                 _isRuined = true;
@@ -115,8 +117,12 @@ public class AlchemyCauldron : MonoBehaviour
         Destroy(ingredientObject);
     }
 
+    /// <summary>
+    /// Boþ þiþe daldýrýldýðýnda sonucu hesaplar, objeyi üretir ve koþulsuz þartsýz ele verir.
+    /// </summary>
     private void DipBottle(GameObject emptyBottle)
     {
+        // 1. Oyuncunun elini bul (Hangi el boþ þiþeyi tutuyor?)
         XRGrabInteractable oldGrab = emptyBottle.GetComponent<XRGrabInteractable>();
         IXRSelectInteractor holdingHand = null;
 
@@ -125,38 +131,24 @@ public class AlchemyCauldron : MonoBehaviour
             holdingHand = oldGrab.interactorsSelecting[0];
         }
 
+        // 2. Doðma noktasýný belirle ve eski þiþeyi sil
         Vector3 spawnPos = customSpawnPoint != null ? customSpawnPoint.position : emptyBottle.transform.position;
         Quaternion spawnRot = customSpawnPoint != null ? customSpawnPoint.rotation : emptyBottle.transform.rotation;
 
         Destroy(emptyBottle);
 
+        // 3. Karýþým sonucuna göre doðru prefab'ý üret
         PotionRecipe matchedRecipe = GetExactMatch();
+        GameObject newPotion = null;
 
         if (matchedRecipe != null && !_isRuined)
         {
-            GameObject newPotion = Instantiate(matchedRecipe.resultPotionPrefab, spawnPos, spawnRot);
+            // BAÞARILI DURUM
+            newPotion = Instantiate(matchedRecipe.resultPotionPrefab, spawnPos, spawnRot);
 
             if (newPotion.TryGetComponent<PotionColorController>(out PotionColorController colorController))
             {
                 colorController.SetLiquidColor(matchedRecipe.targetColor);
-            }
-
-            if (customSpawnPoint == null && holdingHand != null)
-            {
-                XRGrabInteractable newGrab = newPotion.GetComponent<XRGrabInteractable>();
-                if (newGrab != null)
-                {
-                    if (newPotion.TryGetComponent<DualGripMover>(out DualGripMover dualGrip))
-                    {
-                        dualGrip.UpdateGripPosition(holdingHand.transform);
-                    }
-
-                    XRInteractionManager interactionManager = FindFirstObjectByType<XRInteractionManager>();
-                    if (interactionManager != null)
-                    {
-                        interactionManager.SelectEnter(holdingHand, (IXRSelectInteractable)newGrab);
-                    }
-                }
             }
 
             if (successParticles != null) successParticles.Play();
@@ -164,14 +156,47 @@ public class AlchemyCauldron : MonoBehaviour
         }
         else
         {
-            Instantiate(ruinedPotionPrefab, spawnPos, spawnRot);
+            // BAÞARISIZ / ÇÖP DURUM
+            newPotion = Instantiate(ruinedPotionPrefab, spawnPos, spawnRot);
+
             if (failParticles != null) failParticles.Play();
             PlaySound(failSound);
         }
 
+        // 4. KÜRESEL XR TUTMA (Baþarýlý da olsa çöp de olsa elin içine ýþýnla ve tuttur)
+        if (newPotion != null && holdingHand != null)
+        {
+            XRGrabInteractable newGrab = newPotion.GetComponent<XRGrabInteractable>();
+            if (newGrab != null)
+            {
+                Transform handTransform = holdingHand.transform;
+
+                // Offset (uzakta kalma) hatasýný önlemek için direkt elin pozisyonuna ýþýnla
+                newPotion.transform.position = handTransform.position;
+                newPotion.transform.rotation = handTransform.rotation;
+
+                // Eðer çift el tutma ayarý varsa onu da güncelle
+                if (newPotion.TryGetComponent<DualGripMover>(out DualGripMover dualGrip))
+                {
+                    dualGrip.UpdateGripPosition(handTransform);
+                }
+
+                // XR Yöneticisine objeyi zorla tutturmasý emrini ver
+                XRInteractionManager interactionManager = FindFirstObjectByType<XRInteractionManager>();
+                if (interactionManager != null)
+                {
+                    interactionManager.SelectEnter(holdingHand, (IXRSelectInteractable)newGrab);
+                }
+            }
+        }
+
+        // 5. Kazaný sýfýrla
         ResetCauldron();
     }
 
+    /// <summary>
+    /// Atýlan malzemelerle eþleþen ilk geçerli tarifi bulur.
+    /// </summary>
     private PotionRecipe GetFirstValidRecipe()
     {
         foreach (PotionRecipe recipe in allRecipes)
@@ -192,6 +217,9 @@ public class AlchemyCauldron : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// Kazandaki malzemelerle birebir eþleþen bitmiþ tarifi döndürür.
+    /// </summary>
     private PotionRecipe GetExactMatch()
     {
         foreach (PotionRecipe recipe in allRecipes)
@@ -210,6 +238,9 @@ public class AlchemyCauldron : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// Objenin herhangi bir tarifte kullanýlýp kullanýlmadýðýný kontrol eder.
+    /// </summary>
     private bool IsTagInAnyRecipe(string tagToCheck)
     {
         foreach (PotionRecipe recipe in allRecipes)
@@ -219,6 +250,9 @@ public class AlchemyCauldron : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Etikete karþýlýk gelen özel sývý rengini döndürür.
+    /// </summary>
     private Color? GetColorForTag(string searchTag)
     {
         foreach (TagColorMap map in tagColorMappings)
@@ -228,6 +262,9 @@ public class AlchemyCauldron : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// Kazan sývýsýnýn (Material) rengini günceller.
+    /// </summary>
     private void UpdateLiquidColor(Color newColor)
     {
         if (liquidRenderer != null)
@@ -237,6 +274,9 @@ public class AlchemyCauldron : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Kazan verilerini ve rengini varsayýlan (temiz) durumuna sýfýrlar.
+    /// </summary>
     private void ResetCauldron()
     {
         _addedTags.Clear();
@@ -245,6 +285,9 @@ public class AlchemyCauldron : MonoBehaviour
         UpdateLiquidColor(_currentLiquidColor);
     }
 
+    /// <summary>
+    /// Belirtilen ses dosyasýný bir kerelik çalar.
+    /// </summary>
     private void PlaySound(AudioClip clip)
     {
         if (clip != null && _audioSource != null)

@@ -1,13 +1,12 @@
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
-using UnityEngine.XR.Interaction.Toolkit.Interactables; // Unity 6 XR objeleri için
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 /// <summary>
-/// Plays an impact sound with spam-prevention (Cooldown) and XR Grab awareness.
-/// (XR tutma kontrolü ve Cooldown sistemi ile spam yapmayan darbe sesi oynatýcýsý.)
+/// Çarpýþma anýnda ses çalar. Objeyi býrakma anýndaki el sürtünmesi kaynaklý sahte sesleri önler.
 /// </summary>
 [RequireComponent(typeof(AudioSource))]
-public class ImpactSoundPlayer : MonoBehaviour
+public class CollisionSoundController : MonoBehaviour
 {
     [Header("Audio Settings (Ses Ayarlarý)")]
     public AudioClip impactSound;
@@ -15,54 +14,76 @@ public class ImpactSoundPlayer : MonoBehaviour
     public float maxVolume = 1f;
 
     [Header("Physics Settings (Fizik Ayarlarý)")]
-    [Tooltip("Sadece bu hýzýn üzerindeki çarpmalarda ses çýkar (Yere yavaþça konduðunda susar).")]
-    public float minImpactVelocity = 1.2f;
+    public float minImpactForce = 1.0f;
+    public float cooldown = 0.15f;
 
-    [Tooltip("Sesin makineli tüfek gibi arka arkaya çalmasýný engellemek için bekleme süresi (Saniye).")]
-    public float cooldownTime = 0.15f;
+    [Header("VR Settings (VR Ayarlarý)")]
+    [Tooltip("Elinden býraktýktan sonra ele sürtünme sesini engellemek için gereken sessizlik süresi (Saniye)")]
+    public float muteDurationAfterRelease = 0.2f;
 
     private AudioSource _audioSource;
     private XRGrabInteractable _grabInteractable;
     private float _lastPlayTime;
+    private float _lastReleaseTime;
 
-    /// <summary>
-    /// Bileþenleri ve VR ayarlarýný baþlatýr.
-    /// </summary>
     private void Awake()
     {
         _audioSource = GetComponent<AudioSource>();
         _audioSource.spatialBlend = 1f;
         _audioSource.playOnAwake = false;
 
-        // Üzerinde VR tutma kodu varsa onu hafýzaya al
         _grabInteractable = GetComponent<XRGrabInteractable>();
     }
 
     /// <summary>
-    /// Fiziksel çarpýþmalarý algýlar, filtrelerden geçirip sesi çalar.
+    /// Obje aktifken XR býrakma (Release) olayýna abone olur.
     /// </summary>
+    private void OnEnable()
+    {
+        if (_grabInteractable != null)
+        {
+            _grabInteractable.selectExited.AddListener(OnReleasedFromHand);
+        }
+    }
+
+    /// <summary>
+    /// Obje kapandýðýnda bellek sýzýntýsýný önler.
+    /// </summary>
+    private void OnDisable()
+    {
+        if (_grabInteractable != null)
+        {
+            _grabInteractable.selectExited.RemoveListener(OnReleasedFromHand);
+        }
+    }
+
+    /// <summary>
+    /// Oyuncu objeyi elinden býraktýðý an tetiklenir ve zamaný kaydeder.
+    /// </summary>
+    private void OnReleasedFromHand(SelectExitEventArgs args)
+    {
+        _lastReleaseTime = Time.time;
+    }
+
     private void OnCollisionEnter(Collision collision)
     {
-        // 1. GÜVENLÝK FÝLTRESÝ: Obje þu an oyuncunun elinde mi? (Eðer elindeyse ses çýkarma)
+        // 1. GÜVENLÝK: Obje þu an elde mi tutuluyor?
         if (_grabInteractable != null && _grabInteractable.isSelected) return;
 
-        // 2. GÜVENLÝK FÝLTRESÝ: Son sesin üzerinden yeterince zaman geçmediyse (Cooldown) iptal et
-        if (Time.time - _lastPlayTime < cooldownTime) return;
+        // 2. YENÝ GÜVENLÝK: Obje elden henüz yeni mi býrakýldý? (Milisaniyelik el sürtünmesini iptal et)
+        if (Time.time - _lastReleaseTime < muteDurationAfterRelease) return;
 
-        // Çarpýþmanýn hýzýný (þiddetini) al
+        // 3. GÜVENLÝK: Makinalý tüfek gibi spam yapýyor mu?
+        if (Time.time - _lastPlayTime < cooldown) return;
+
         float impactForce = collision.relativeVelocity.magnitude;
 
-        // 3. GÜVENLÝK FÝLTRESÝ: Çarpýþma yeterince sert mi?
-        if (impactForce >= minImpactVelocity)
+        // 4. GÜVENLÝK: Çarpma yeterince sert mi?
+        if (impactForce >= minImpactForce)
         {
-            if (impactSound != null && _audioSource != null)
-            {
-                // Sesin çalýndýðý zamaný kaydet (Cooldown'u baþlat)
-                _lastPlayTime = Time.time;
-
-                float dynamicVolume = Mathf.Clamp01(impactForce / 5f) * maxVolume;
-                _audioSource.PlayOneShot(impactSound, dynamicVolume);
-            }
+            _lastPlayTime = Time.time;
+            float dynamicVolume = Mathf.Clamp01(impactForce / 5f) * maxVolume;
+            _audioSource.PlayOneShot(impactSound, dynamicVolume);
         }
     }
 }
